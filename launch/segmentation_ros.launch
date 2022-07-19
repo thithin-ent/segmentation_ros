@@ -1,0 +1,5 @@
+<launch>
+
+	<node pkg="segmentation_ros" type="segmentation_ros" name="segmentation_ros" output="screen" />
+
+</launch>
