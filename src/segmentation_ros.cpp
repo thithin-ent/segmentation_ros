@@ -3,7 +3,8 @@
 Segment_point::Segment_point()
 {
     velodyne_sub = nh_.subscribe("velodyne_points", 1, &Segment_point::scan_callback,this);
-    scan_pub = nh_.advertise<sensor_msgs::PointCloud2>("pointcloude_pub",1);
+    scan_pub = nh_.advertise<sensor_msgs::PointCloud2>("segment_point",1);
+    planar_pub = nh_.advertise<sensor_msgs::PointCloud2>("planar_point",1);
 }
 
 Segment_point::~Segment_point()
@@ -32,6 +33,8 @@ void Segment_point::scan_callback(const sensor_msgs::PointCloud2ConstPtr &data)
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
     seg.setDistanceThreshold(0.5);
+    seg.setInputCloud (ptr_cloud);
+    seg.segment (*inliers, *coefficients);
 
     pcl::ExtractIndices<pcl::PointXYZI> extract;
     extract.setInputCloud(ptr_cloud);
@@ -88,6 +91,12 @@ void Segment_point::scan_callback(const sensor_msgs::PointCloud2ConstPtr &data)
     segment_cloud.header.stamp = data->header.stamp;
     segment_cloud.header.frame_id = data->header.frame_id;
     scan_pub.publish(segment_cloud);
+
+    sensor_msgs::PointCloud2 planar_cloud;
+    pcl::toROSMsg(*cloud_f, planar_cloud);
+    segment_cloud.header.stamp = data->header.stamp;
+    segment_cloud.header.frame_id = data->header.frame_id;
+    planar_pub.publish(planar_cloud);
 
 }
 

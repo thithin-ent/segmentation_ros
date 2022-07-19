@@ -43,6 +43,7 @@ class Segment_point
         ros::NodeHandle nh_;
         ros::Subscriber velodyne_sub;
         ros::Publisher scan_pub;
+        ros::Publisher planar_pub;
 };
 
 #endif
