@@ -1,5 +1,5 @@
 <launch>
-
+	<node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find segmentation_ros)/launch/rviz/segmentation_ros.rviz"/>
 	<node pkg="segmentation_ros" type="segmentation_ros" name="segmentation_ros" output="screen" />
 
 </launch>

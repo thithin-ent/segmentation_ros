@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <fstream>
+#include <vector>
 #include <string>
 #include <eigen3/Eigen/Dense>
 #include <ros/ros.h>
@@ -37,13 +39,17 @@ class Segment_point
         Segment_point();
         ~Segment_point();
         void scan_callback(const sensor_msgs::PointCloud2ConstPtr &data);
+        void run();
+        std::vector<float> read_lidar_data(const std::string folder_path);
 
     private:
     protected:
         ros::NodeHandle nh_;
-        ros::Subscriber velodyne_sub;
-        ros::Publisher scan_pub;
-        ros::Publisher planar_pub;
+        ros::Subscriber velodyne_sub_;
+        ros::Publisher scan_pub_;
+        ros::Publisher planar_pub_;
+        std::size_t line_num_;
+        std::string dataset_folder_;
 };
 
 #endif

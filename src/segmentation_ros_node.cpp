@@ -4,6 +4,7 @@ int main(int argc, char *argv[])
 {
     ros::init(argc, argv, "segmentation_ros");
     Segment_point segment_point;
+    segment_point.run();
     ros::spin();
 
     return 0;
