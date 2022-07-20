@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <cmath>
 #include <fstream>
 #include <vector>
 #include <string>
@@ -50,6 +51,8 @@ class Segment_point
         ros::Publisher planar_pub_;
         std::size_t line_num_;
         std::string dataset_folder_;
+        pcl::SACSegmentation<pcl::PointXYZI> seg_;
+        pcl::EuclideanClusterExtraction<pcl::PointXYZI> eulideanclusterextraction_;
 };
 
 #endif

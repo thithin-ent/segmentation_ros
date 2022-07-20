@@ -8,6 +8,17 @@ Segment_point::Segment_point()
     line_num_ = 0;
     dataset_folder_ = "/media/user/F47CC21E7CC1DC0C/linux/KITTI/dataset/";
 
+    seg_.setOptimizeCoefficients(true);
+    seg_.setModelType(pcl::SACMODEL_PLANE);
+    seg_.setMethodType(pcl::SAC_RANSAC);
+    seg_.setMaxIterations(500);
+    seg_.setDistanceThreshold(0.2);
+    seg_.setEpsAngle(  10.0f * (M_PI/180.0f) );
+
+    eulideanclusterextraction_.setClusterTolerance(0.2);
+    eulideanclusterextraction_.setMinClusterSize(200);
+    eulideanclusterextraction_.setMaxClusterSize(15000);
+
 }
 
 Segment_point::~Segment_point()
@@ -106,7 +117,7 @@ void Segment_point::run()
     std::string timestamp_path =  "sequences/00/times.txt";
     std::ifstream timestamp_file(dataset_folder_ + timestamp_path, std::ifstream::in);
     std::string line;
-    ros::Rate r(10.0 / 3);
+    ros::Rate r(10.0);
     cout << "run" << endl;
     while (std::getline(timestamp_file, line) && ros::ok())
     {
@@ -128,46 +139,41 @@ void Segment_point::run()
         }
         *ptr_cloud = laser_cloud;
 
+        pcl::VoxelGrid<pcl::PointXYZI> vg;
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZI>);
+        vg.setInputCloud(ptr_cloud);
+        vg.setLeafSize(0.1f, 0.1f, 0.1f);
+        vg.setMinimumPointsNumberPerVoxel(1);
+        vg.filter(*cloud_filtered);
+        ptr_cloud = cloud_filtered;
+
+
         // cout <<  "laser_cloud :" << (*ptr_cloud).size() << endl;
 
         // start = std::chrono::high_resolution_clock::now();
-        pcl::SACSegmentation<pcl::PointXYZI> seg;
+        
         pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
         pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZI>());
         pcl::PCDWriter writer;
-        seg.setOptimizeCoefficients(true);
-        seg.setModelType(pcl::SACMODEL_PLANE);
-        seg.setMethodType(pcl::SAC_RANSAC);
-        seg.setMaxIterations(100);
-        seg.setDistanceThreshold(0.5);
-        seg.setInputCloud(ptr_cloud);
-        seg.segment(*inliers, *coefficients);
+
+        seg_.setInputCloud(ptr_cloud);
+        seg_.segment(*inliers, *coefficients);
 
         pcl::ExtractIndices<pcl::PointXYZI> extract;
         extract.setInputCloud(ptr_cloud);
         extract.setIndices(inliers);
         extract.setNegative(true);
         extract.filter(*cloud_f);
-        // end = std::chrono::high_resolution_clock::now();
-        // double time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( end - start ).count();
-        // cout << "time_plane: "<< time_elapsed <<" m second(s)."<< endl;
-
-        pcl::EuclideanClusterExtraction<pcl::PointXYZI> eulideanclusterextraction;
+        
         pcl::search::KdTree<pcl::PointXYZI>::Ptr kd_tree(new pcl::search::KdTree<pcl::PointXYZI>);
         std::vector<pcl::PointIndices> cluster_indices;
 
-        eulideanclusterextraction.setClusterTolerance(0.2);
-        eulideanclusterextraction.setMinClusterSize(200);
-        eulideanclusterextraction.setMaxClusterSize(15000);
-        eulideanclusterextraction.setSearchMethod(kd_tree);
-        // start = std::chrono::high_resolution_clock::now();
-        eulideanclusterextraction.setInputCloud(cloud_f);
-        eulideanclusterextraction.extract(cluster_indices);
-        // end = std::chrono::high_resolution_clock::now();
 
-        // time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( end - start ).count();
-        // cout << "time_cluster: "<< time_elapsed <<" m second(s)."<< endl;
+        eulideanclusterextraction_.setSearchMethod(kd_tree);
+        eulideanclusterextraction_.setInputCloud(cloud_f);
+        eulideanclusterextraction_.extract(cluster_indices);
+
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
