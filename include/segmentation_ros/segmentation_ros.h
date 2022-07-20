@@ -30,6 +30,23 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/cloud_viewer.h> 
 #include <chrono>
+#include <pcl/features/normal_3d.h>
+#include <pcl/filters/filter_indices.h> 
+#include <pcl/segmentation/region_growing.h>
+
+
+#include <pcl/ModelCoefficients.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+
+
+
 
 using namespace std;
 using namespace Eigen;
@@ -40,7 +57,8 @@ class Segment_point
         Segment_point();
         ~Segment_point();
         void scan_callback(const sensor_msgs::PointCloud2ConstPtr &data);
-        void run();
+        void eulidean_run();
+        void region_run();
         std::vector<float> read_lidar_data(const std::string folder_path);
 
     private:

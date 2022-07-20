@@ -11,9 +11,9 @@ Segment_point::Segment_point()
     seg_.setOptimizeCoefficients(true);
     seg_.setModelType(pcl::SACMODEL_PLANE);
     seg_.setMethodType(pcl::SAC_RANSAC);
-    seg_.setMaxIterations(500);
-    seg_.setDistanceThreshold(0.2);
-    seg_.setEpsAngle(  10.0f * (M_PI/180.0f) );
+    seg_.setMaxIterations(200);
+    seg_.setDistanceThreshold(0.3);
+    seg_.setEpsAngle(  15.0f * (M_PI/180.0f) );
 
     eulideanclusterextraction_.setClusterTolerance(0.2);
     eulideanclusterextraction_.setMinClusterSize(200);
@@ -111,14 +111,14 @@ void Segment_point::scan_callback(const sensor_msgs::PointCloud2ConstPtr &data)
     // planar_pub.publish(planar_cloud);
 }
 
-void Segment_point::run()
+void Segment_point::eulidean_run()
 {
 
     std::string timestamp_path =  "sequences/00/times.txt";
     std::ifstream timestamp_file(dataset_folder_ + timestamp_path, std::ifstream::in);
     std::string line;
     ros::Rate r(10.0);
-    cout << "run" << endl;
+    // cout << "run" << endl;
     while (std::getline(timestamp_file, line) && ros::ok())
     {
         std::stringstream folder_path;
@@ -147,13 +147,10 @@ void Segment_point::run()
         vg.filter(*cloud_filtered);
         ptr_cloud = cloud_filtered;
 
-
-        // cout <<  "laser_cloud :" << (*ptr_cloud).size() << endl;
-
-        // start = std::chrono::high_resolution_clock::now();
-        
         pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
         pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+        coefficients->values.resize (4);
+        coefficients->values[3] = -0.5;
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZI>());
         pcl::PCDWriter writer;
 
@@ -194,10 +191,6 @@ void Segment_point::run()
                 cloud_cluster->push_back(point_temp);
             }
         }
-
-        // pcl::toPCLPointCloud2(*cloud_cluster, pcl_pc2);
-        // pcl_conversions::toPCL(pcl_pc2,);
-
         sensor_msgs::PointCloud2 segment_cloud;
         pcl::toROSMsg(*cloud_cluster, segment_cloud);
         segment_cloud.header.stamp = ros::Time().fromSec(timestamp);
@@ -213,6 +206,100 @@ void Segment_point::run()
         r.sleep();
     }
 }
+
+void Segment_point::region_run()
+{
+
+    std::string timestamp_path =  "sequences/00/times.txt";
+    std::ifstream timestamp_file(dataset_folder_ + timestamp_path, std::ifstream::in);
+    std::string line;
+    ros::Rate r(10.0);
+    cout << "run" << endl;
+    while (std::getline(timestamp_file, line) && ros::ok())
+    {
+        std::stringstream folder_path;
+        float timestamp = stof(line);
+        folder_path << dataset_folder_<< "velodyne/sequences/00/velodyne/" << std::setfill('0') << std::setw(6) << line_num_ << ".bin";
+        std::vector<float> lidar_data = read_lidar_data(folder_path.str());
+        //  cout << folder_path.str() << endl;
+        pcl::PointCloud<pcl::PointXYZI>::Ptr ptr_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointCloud<pcl::PointXYZI> laser_cloud;
+        for (std::size_t i = 0; i < lidar_data.size(); i += 4)
+        {
+            pcl::PointXYZI point;
+            point.x = lidar_data[i];
+            point.y = lidar_data[i + 1];
+            point.z = lidar_data[i + 2];
+            point.intensity = lidar_data[i + 3];
+            laser_cloud.push_back(point);
+        }
+        *ptr_cloud = laser_cloud;
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZI>);
+
+        pcl::search::Search<pcl::PointXYZI>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZI>);
+        pcl::PointCloud <pcl::Normal>::Ptr normals (new pcl::PointCloud <pcl::Normal>);
+        pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> normal_estimator;
+        normal_estimator.setSearchMethod (tree);
+        normal_estimator.setInputCloud (ptr_cloud);
+        normal_estimator.setKSearch (50);
+        normal_estimator.compute (*normals);
+
+        pcl::IndicesPtr indices (new std::vector <int>);
+        pcl::removeNaNFromPointCloud(*ptr_cloud, *indices);
+        pcl::RegionGrowing<pcl::PointXYZI, pcl::Normal> reg;
+        reg.setMinClusterSize (50);
+        reg.setMaxClusterSize (1000000);
+        reg.setSearchMethod (tree);
+        reg.setNumberOfNeighbours (30);
+        reg.setInputCloud (ptr_cloud);
+        reg.setIndices (indices);
+        reg.setInputNormals (normals);
+        reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
+        reg.setCurvatureThreshold (1.0);       
+
+        std::vector <pcl::PointIndices> cluster_indices;
+        reg.extract (cluster_indices);
+
+
+
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
+        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
+        {
+            int A = rand() % 256;
+            int B = rand() % 256;
+            int C = rand() % 256;
+
+            for (const auto &idx : it->indices)
+            {
+                pcl::PointXYZRGB point_temp;
+                point_temp.x = ptr_cloud->points[idx].x;
+                point_temp.y = ptr_cloud->points[idx].y;
+                point_temp.z = ptr_cloud->points[idx].z;
+                point_temp.r = A;
+                point_temp.g = B;
+                point_temp.b = C;
+                cloud_cluster->push_back(point_temp);
+            }
+        }
+
+        sensor_msgs::PointCloud2 segment_cloud;
+        pcl::toROSMsg(*cloud_cluster, segment_cloud);
+        segment_cloud.header.stamp = ros::Time().fromSec(timestamp);
+        segment_cloud.header.frame_id = "base_link";
+        scan_pub_.publish(segment_cloud);
+
+        // sensor_msgs::PointCloud2 planar_cloud;
+        // pcl::toROSMsg(*cloud_f, planar_cloud);
+        // planar_cloud.header.stamp = ros::Time().fromSec(timestamp);
+        // planar_cloud.header.frame_id = "base_link";
+        // planar_pub_.publish(planar_cloud);
+        line_num_++;
+        r.sleep();
+    }
+}
+
 
 
 std::vector<float> Segment_point::read_lidar_data(const std::string folder_path)
