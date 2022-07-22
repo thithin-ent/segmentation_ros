@@ -33,18 +33,8 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/filters/filter_indices.h> 
 #include <pcl/segmentation/region_growing.h>
-
-
-#include <pcl/ModelCoefficients.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/segmentation/sac_segmentation.h>
-
+#include <pcl/filters/project_inliers.h>
+#include <pcl/segmentation/progressive_morphological_filter.h>
 
 
 
@@ -59,7 +49,9 @@ class Segment_point
         void scan_callback(const sensor_msgs::PointCloud2ConstPtr &data);
         void eulidean_run();
         void region_run();
+        void Progressive_run();
         std::vector<float> read_lidar_data(const std::string folder_path);
+
 
     private:
     protected:
@@ -69,6 +61,8 @@ class Segment_point
         ros::Publisher planar_pub_;
         std::size_t line_num_;
         std::string dataset_folder_;
+        std::string sequences_;
+        bool use_bag_;
         pcl::SACSegmentation<pcl::PointXYZI> seg_;
         pcl::EuclideanClusterExtraction<pcl::PointXYZI> eulideanclusterextraction_;
 };
