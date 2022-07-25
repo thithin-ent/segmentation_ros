@@ -40,6 +40,7 @@
 
 using namespace std;
 using namespace Eigen;
+using namespace pcl;
 
 class Segment_point
 {
@@ -47,11 +48,35 @@ class Segment_point
         Segment_point();
         ~Segment_point();
         void scan_callback(const sensor_msgs::PointCloud2ConstPtr &data);
-        void eulidean_run();
-        void region_run();
-        void Progressive_run();
-        std::vector<float> read_lidar_data(const std::string folder_path);
 
+
+
+        // read file
+
+        std::vector<float> read_lidar_data(const std::string folder_path);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr read_bin(const std::string folder_path);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr read_pcd(const std::string folder_path);
+
+        // down sampling
+
+        PointCloud<PointXYZI>::Ptr voxel_grid(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+
+        // get point normal
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr get_normal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+
+        // ground remove
+
+        std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ransac(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+        std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> Progressive(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+
+        // segmentation
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr eulidean(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+
+        void kitti_run();
+        void pcd_run();
+        bool get_kitti();
 
     private:
     protected:
@@ -63,7 +88,14 @@ class Segment_point
         std::string dataset_folder_;
         std::string sequences_;
         bool use_bag_;
+        bool use_kitti_;
+        // down sampling class
+
+        // point normal class
+
+        // ground remove class
         pcl::SACSegmentation<pcl::PointXYZI> seg_;
+        // segmentation class
         pcl::EuclideanClusterExtraction<pcl::PointXYZI> eulideanclusterextraction_;
 };
 

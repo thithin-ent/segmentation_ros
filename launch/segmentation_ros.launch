@@ -3,7 +3,8 @@
         <node pkg="segmentation_ros" type="segmentation_ros" name="segmentation_ros" output="screen" >
             <param name="dataset_folder" type="string" value="/media/user/F47CC21E7CC1DC0C/linux/KITTI/dataset/" />
             <param name="sequences" type="string" value="15" />
-            <param name="use_dataset" type="bool" value="false" />
+            <param name="use_dataset" type="bool" value="true" />
+	    <param name="use_kitti" type="bool" value="true" />
         </node >
 
 </launch>

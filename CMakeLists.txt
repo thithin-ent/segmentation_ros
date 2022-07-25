@@ -37,6 +37,15 @@ add_executable(${PROJECT_NAME} src/segmentation_ros_node.cpp src/segmentation_ro
    ${catkin_LIBRARIES} ${CERES_LIBRARIES}
  )
 
+add_executable(msg_pdcsaver src/msg_pcdsaver.cpp)
+ target_link_libraries(msg_pdcsaver
+   ${catkin_LIBRARIES} ${CERES_LIBRARIES}
+ )
+
+install(DIRECTORY include/msg_pcdsaver/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)
+
 
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
