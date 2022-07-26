@@ -25,8 +25,8 @@ Segment_point::Segment_point()
     seg_.setDistanceThreshold(0.3);
     seg_.setEpsAngle(15.0f * (M_PI / 180.0f));
 
-    eulideanclusterextraction_.setClusterTolerance(0.2);
-    eulideanclusterextraction_.setMinClusterSize(200);
+    eulideanclusterextraction_.setClusterTolerance(0.5);
+    eulideanclusterextraction_.setMinClusterSize(100);
     eulideanclusterextraction_.setMaxClusterSize(15000);
 }
 
@@ -41,11 +41,10 @@ void Segment_point::scan_callback(const sensor_msgs::PointCloud2ConstPtr &data)
     pcl::PointCloud<pcl::PointXYZI>::Ptr ptr_cloud(new pcl::PointCloud<pcl::PointXYZI>);
     pcl::fromPCLPointCloud2(pcl_pc2, *ptr_cloud);
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr voxel_ptr(new pcl::PointCloud<pcl::PointXYZI>);
-    voxel_ptr = voxel_grid(ptr_cloud);
+    ptr_cloud = voxel_grid(ptr_cloud);
 
     std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ptr_vector;
-    ptr_vector = ransac(voxel_ptr);
+    ptr_vector = ransac(ptr_cloud);
 
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
     cloud_cluster = eulidean(ptr_vector[0]);
@@ -58,7 +57,7 @@ void Segment_point::scan_callback(const sensor_msgs::PointCloud2ConstPtr &data)
     scan_pub_.publish(segment_cloud);
 
     sensor_msgs::PointCloud2 planar_cloud;
-    pcl::toROSMsg((*ptr_vector[0]), planar_cloud);
+    pcl::toROSMsg((*ptr_vector[1]), planar_cloud);
     planar_cloud.header.stamp = ros::Time().now();
     planar_cloud.header.frame_id = "base_link";
     planar_pub_.publish(planar_cloud);
@@ -122,6 +121,40 @@ PointCloud<PointXYZI>::Ptr Segment_point::voxel_grid(const pcl::PointCloud<pcl::
 
 // get point normal
 
+pcl::PointCloud<pcl::PointNormal>::Ptr Segment_point::get_pointnormal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr,const double radius )
+{
+
+    pcl::NormalEstimation<pcl::PointXYZI, pcl::PointNormal> ne;
+    ne.setInputCloud (src_ptr);
+
+    pcl::search::KdTree<pcl::PointXYZI>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZI> ());
+    ne.setSearchMethod (tree);
+
+        pcl::PointCloud<pcl::PointNormal>::Ptr normal_ptr(new pcl::PointCloud<pcl::PointNormal>);
+    ne.setRadiusSearch (radius);
+
+    ne.compute (*normal_ptr);
+    return normal_ptr;
+}
+
+pcl::PointCloud<pcl::PointNormal>::Ptr Segment_point::get_MLSpointnormal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr,const double radius )
+{
+
+    pcl::MovingLeastSquares<pcl::PointXYZI, pcl::PointNormal> mls;
+    mls.setInputCloud (src_ptr);
+    mls.setComputeNormals (true);
+    pcl::search::KdTree<pcl::PointXYZI>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZI> ());
+    mls.setSearchMethod (tree);
+    mls.setPolynomialOrder (2);
+    pcl::PointCloud<pcl::PointNormal>normal;
+    mls.setSearchRadius (radius);
+
+    mls.process (normal);
+    pcl::PointCloud<pcl::PointNormal>::Ptr normal_ptr(new pcl::PointCloud<pcl::PointNormal>);
+    *normal_ptr = normal;
+    return normal_ptr;
+}
+
 // ground remove
 
 std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> Segment_point::ransac(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr)
@@ -177,6 +210,63 @@ std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> Segment_point::Progressive(con
     return ptr_vector;
 }
 
+std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> Segment_point::diff_normal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr)
+{
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ptr_vector;
+    pcl::PointCloud<pcl::PointNormal>::Ptr normals_large_scale(new pcl::PointCloud<pcl::PointNormal>());
+    pcl::PointCloud<pcl::PointNormal>::Ptr normals_small_scale(new pcl::PointCloud<pcl::PointNormal>());
+    PointCloud<PointNormal>::Ptr doncloud (new pcl::PointCloud<PointNormal>);
+    copyPointCloud (*src_ptr, *doncloud);
+
+    normals_small_scale = get_pointnormal(src_ptr,0.75);
+    normals_large_scale = get_pointnormal(src_ptr,2.0);
+    pcl::DifferenceOfNormalsEstimation<PointXYZI, PointNormal, PointNormal> don;
+    don.setInputCloud (src_ptr);
+
+    don.setNormalScaleLarge (normals_large_scale);
+
+    don.setNormalScaleSmall (normals_small_scale);
+
+    if (!don.initCompute ())
+    {
+      std::cerr << "Error: Could not initialize DoN feature operator" << std::endl;
+      exit (EXIT_FAILURE);
+    }
+
+    don.computeFeature (*doncloud);
+//    cout << "test1" << endl;
+    pcl::ConditionOr<PointNormal>::Ptr range_cond_nonground (new pcl::ConditionOr<PointNormal> ());
+    pcl::ConditionOr<PointNormal>::Ptr range_cond_ground (new pcl::ConditionOr<PointNormal> ());
+    range_cond_nonground->addComparison (pcl::FieldComparison<PointNormal>::ConstPtr (
+                                 new pcl::FieldComparison<PointNormal> ("z", pcl::ComparisonOps::GT, -1.0)));
+    range_cond_nonground->addComparison (pcl::FieldComparison<PointNormal>::ConstPtr (
+                                 new pcl::FieldComparison<PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.2)));
+    pcl::ConditionalRemoval<PointNormal> condrem(true);
+    condrem.setCondition (range_cond_nonground);
+    condrem.setInputCloud (doncloud);
+//    cout << "test2" << endl;
+    pcl::PointCloud<PointNormal>::Ptr donground_filtered (new pcl::PointCloud<PointNormal>);
+    pcl::PointCloud<PointNormal>::Ptr nonground_filtered (new pcl::PointCloud<PointNormal>);
+    pcl::PointCloud<pcl::PointXYZI>::Ptr ptr_cloud_nonground (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointCloud<pcl::PointXYZI>::Ptr ptr_cloud_ground (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+
+    condrem.filter (*nonground_filtered);
+    condrem.getRemovedIndices(*inliers);
+
+    pcl::ExtractIndices<pcl::PointXYZI> extract;
+    extract.setInputCloud(src_ptr);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*ptr_cloud_nonground);
+    ptr_vector.push_back(ptr_cloud_nonground);
+    extract.setNegative(false);
+    extract.filter(*ptr_cloud_ground);
+    ptr_vector.push_back(ptr_cloud_ground);
+
+    return ptr_vector;
+}
+
 // segmentation
 
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr Segment_point::eulidean(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr)
@@ -211,6 +301,52 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr Segment_point::eulidean(const pcl::PointC
     return cloud_cluster;
 }
 
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr Segment_point::region_glow(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr)
+{
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::search::KdTree<pcl::PointXYZI>::Ptr kd_tree(new pcl::search::KdTree<pcl::PointXYZI>);
+    std::vector<pcl::PointIndices> cluster_indices;
+
+    pcl::PointCloud <pcl::Normal>::Ptr normals (new pcl::PointCloud <pcl::Normal>);
+    pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> normal_estimator;
+    normal_estimator.setSearchMethod (kd_tree);
+    normal_estimator.setInputCloud (src_ptr);
+    normal_estimator.setKSearch (50);
+    normal_estimator.compute (*normals);
+
+    pcl::RegionGrowing<pcl::PointXYZI, pcl::Normal> reg;
+    reg.setMinClusterSize (50);
+    reg.setMaxClusterSize (1000000);
+    reg.setSearchMethod (kd_tree);
+    reg.setNumberOfNeighbours (30);
+    reg.setInputCloud (src_ptr);
+    reg.setInputNormals (normals);
+    reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
+    reg.setCurvatureThreshold (1.0);
+    reg.extract (cluster_indices);
+
+    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
+    {
+        int A = rand() % 256;
+        int B = rand() % 256;
+        int C = rand() % 256;
+
+        for (const auto &idx : it->indices)
+        {
+            pcl::PointXYZRGB point_temp;
+            point_temp.x = src_ptr->points[idx].x;
+            point_temp.y = src_ptr->points[idx].y;
+            point_temp.z = src_ptr->points[idx].z;
+            point_temp.r = A;
+            point_temp.g = B;
+            point_temp.b = C;
+            cloud_cluster->push_back(point_temp);
+        }
+    }
+    return cloud_cluster;
+}
+
+
 
 void Segment_point::kitti_run()
 {
@@ -218,26 +354,26 @@ void Segment_point::kitti_run()
     std::ifstream timestamp_file(dataset_folder_ + timestamp_path, std::ifstream::in);
     std::string line;
     ros::Rate r(10.0);
-//    cout << timestamp_path << endl;
+
     while (use_bag_ && std::getline(timestamp_file, line) && ros::ok())
     {
         std::stringstream folder_path;
         float timestamp = stof(line);
         folder_path << dataset_folder_ << "velodyne/sequences/" << sequences_ << "/velodyne/" << std::setfill('0') << std::setw(6) << line_num_ << ".bin";
 
-//        cout << folder_path.str() << endl;
-
         pcl::PointCloud<pcl::PointXYZI>::Ptr source_ptr(new pcl::PointCloud<pcl::PointXYZI>);
         source_ptr = read_bin(folder_path.str());
 
-        pcl::PointCloud<pcl::PointXYZI>::Ptr voxel_ptr(new pcl::PointCloud<pcl::PointXYZI>);
-        voxel_ptr = voxel_grid(source_ptr);
+        source_ptr = voxel_grid(source_ptr);
 
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ptr_vector;
-        ptr_vector = ransac(voxel_ptr);
+//        ptr_vector = ransac(source_ptr);
+        ptr_vector = diff_normal(source_ptr);
+//        ptr_vector = Progressive(source_ptr);
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
         cloud_cluster = eulidean(ptr_vector[0]);
+//        cloud_cluster = region_glow(ptr_vector[0]);
 
         sensor_msgs::PointCloud2 segment_cloud;
         pcl::toROSMsg(*cloud_cluster, segment_cloud);
@@ -246,7 +382,7 @@ void Segment_point::kitti_run()
         scan_pub_.publish(segment_cloud);
 
         sensor_msgs::PointCloud2 planar_cloud;
-        pcl::toROSMsg((*ptr_vector[0]), planar_cloud);
+        pcl::toROSMsg((*ptr_vector[1]), planar_cloud);
         planar_cloud.header.stamp = ros::Time().fromSec(timestamp);
         planar_cloud.header.frame_id = "base_link";
         planar_pub_.publish(planar_cloud);
@@ -265,15 +401,16 @@ void Segment_point::pcd_run()
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr source_ptr(new pcl::PointCloud<pcl::PointXYZI>);
         source_ptr = read_pcd(folder_path.str());
-
-        pcl::PointCloud<pcl::PointXYZI>::Ptr voxel_ptr(new pcl::PointCloud<pcl::PointXYZI>);
-        voxel_ptr = voxel_grid(source_ptr);
+//        source_ptr = voxel_grid(source_ptr);
 
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ptr_vector;
-        ptr_vector = ransac(voxel_ptr);
+//        ptr_vector = ransac(source_ptr);
+        ptr_vector = diff_normal(source_ptr);
+//        ptr_vector = Progressive(source_ptr);
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZRGB>);
         cloud_cluster = eulidean(ptr_vector[0]);
+//        cloud_cluster = region_glow(ptr_vector[0]);
 
         sensor_msgs::PointCloud2 segment_cloud;
         pcl::toROSMsg(*cloud_cluster, segment_cloud);
@@ -282,7 +419,7 @@ void Segment_point::pcd_run()
         scan_pub_.publish(segment_cloud);
 
         sensor_msgs::PointCloud2 planar_cloud;
-        pcl::toROSMsg((*ptr_vector[0]), planar_cloud);
+        pcl::toROSMsg((*ptr_vector[1]), planar_cloud);
         planar_cloud.header.stamp = ros::Time().now();
         planar_cloud.header.frame_id = "base_link";
         planar_pub_.publish(planar_cloud);

@@ -29,12 +29,15 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/cloud_viewer.h> 
-#include <chrono>
 #include <pcl/features/normal_3d.h>
 #include <pcl/filters/filter_indices.h> 
 #include <pcl/segmentation/region_growing.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/segmentation/progressive_morphological_filter.h>
+#include <pcl/surface/mls.h>
+#include <pcl/surface/impl/mls.hpp>
+#include <pcl/filters/conditional_removal.h>
+#include <pcl/features/don.h>
 
 
 
@@ -49,8 +52,6 @@ class Segment_point
         ~Segment_point();
         void scan_callback(const sensor_msgs::PointCloud2ConstPtr &data);
 
-
-
         // read file
 
         std::vector<float> read_lidar_data(const std::string folder_path);
@@ -63,16 +64,20 @@ class Segment_point
 
         // get point normal
 
-        pcl::PointCloud<pcl::PointXYZI>::Ptr get_normal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+        pcl::PointCloud<pcl::PointNormal>::Ptr get_pointnormal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr,const double radius );
+        pcl::PointCloud<pcl::PointNormal>::Ptr get_MLSpointnormal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr,const double radius );
+
 
         // ground remove
 
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> ransac(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> Progressive(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+        std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> diff_normal(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
 
         // segmentation
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr eulidean(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr region_glow(const pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr);
 
         void kitti_run();
         void pcd_run();
